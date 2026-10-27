@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import { getBooks } from '../lib/books';
+import { withBase } from '../lib/url';
 
 const books = await getBooks();
 ---
@@ -21,7 +22,7 @@ const books = await getBooks();
     <ul class="grid">
       {books.map((book, i) => (
         <li class="card" style={`--tilt:${(i % 3) - 1}deg`}>
-          <a href={`/read/${book.slug}/`} aria-label={`Read ${book.title}`}>
+          <a href={withBase(`/read/${book.slug}/`)} aria-label={`Read ${book.title}`}>
             <figure class="cover inked">
               <img src={book.cover} alt="" width="600" height="800" loading={i < 6 ? 'eager' : 'lazy'} />
               {book.issue !== undefined && <span class="issue display">#{book.issue}</span>}

@@ -51,7 +51,7 @@ exist are skipped with a warning.
 
 ```sh
 npm install
-npm run dev              # http://localhost:4321
+npm run dev              # http://localhost:4321/comicbooks/
 npm run build            # static site in dist/
 npm run preview          # serve dist/
 npm run generate:samples # regenerate the three sample books
@@ -62,12 +62,28 @@ procedurally by `scripts/generate-samples.mjs`, which also writes their
 `book.yaml` files. `noodle-and-bolt` uses descriptive file names and an explicit
 `pages` list; the other two rely on alphabetical ordering.
 
+## Deployment
+
+Pushing to `main` runs `.github/workflows/deploy.yml`, which builds the site
+and publishes `dist/` to GitHub Pages at
+<https://christoph-jerolimov.github.io/comicbooks/>. One-time setup in the
+repository settings: **Settings → Pages → Build and deployment → Source** must
+be set to **GitHub Actions**. The workflow can also be started by hand from
+the Actions tab.
+
+The project page lives under `/comicbooks/`, so `astro.config.mjs` sets
+`base` accordingly and all internal links go through `withBase()` in
+`src/lib/url.ts`. To serve from the root of a custom domain, build with
+`BASE_PATH=/` and change `site` in the config.
+
 ## Project layout
 
 ```
 public/comics/<book>/     images + book.yaml, one folder per book
 scripts/generate-samples.mjs
 src/lib/books.ts          build-time loader for the manifests
+src/lib/url.ts            base-path helper for links
+.github/workflows/deploy.yml  GitHub Pages deployment
 src/pages/index.astro     the shelf
 src/pages/read/[slug]/    the reader route
 src/components/Viewer.astro  reader UI, gestures, overview

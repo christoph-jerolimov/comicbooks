@@ -1,5 +1,6 @@
 ---
 import type { ComicBook } from '../lib/books';
+import { withBase } from '../lib/url';
 
 interface Props {
   book: ComicBook;
@@ -16,7 +17,7 @@ const payload = {
 
 <div class="viewer" id="viewer" data-dir={book.direction}>
   <header class="chrome top">
-    <a class="chip" href="/" aria-label="Back to the shelf">
+    <a class="chip" href={withBase('/')} aria-label="Back to the shelf">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Shelf</span>
     </a>
