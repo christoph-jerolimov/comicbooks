@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import { withBase } from '../lib/url';
 
 interface Props {
   title: string;
@@ -20,7 +21,7 @@ const { title, description = 'A comic book reader.', app = false } = Astro.props
     <meta name="theme-color" content="#1b1b2f" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
     <title>{title}</title>
   </head>
   <body class:list={{ app }}>

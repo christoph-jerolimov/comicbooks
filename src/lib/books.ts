@@ -4,6 +4,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { parse } from 'yaml';
 import sharp from 'sharp';
+import { withBase } from './url';
 
 export interface ComicPage {
   /** 1-based page number */
@@ -86,7 +87,7 @@ async function loadBook(slug: string): Promise<ComicBook | null> {
     pages.push({
       number: i + 1,
       file: p.file,
-      src: `/comics/${slug}/${encodeURIComponent(p.file)}`,
+      src: withBase(`/comics/${slug}/${encodeURIComponent(p.file)}`),
       caption: p.caption,
       ...(await imageSize(abs)),
     });
@@ -102,7 +103,7 @@ async function loadBook(slug: string): Promise<ComicBook | null> {
     description: manifest.description,
     tags: manifest.tags ?? [],
     direction: manifest.direction === 'rtl' ? 'rtl' : 'ltr',
-    cover: cover ? `/comics/${slug}/${encodeURIComponent(cover)}` : (pages[0]?.src ?? ''),
+    cover: cover ? withBase(`/comics/${slug}/${encodeURIComponent(cover)}`) : (pages[0]?.src ?? ''),
     pages,
   };
 }
