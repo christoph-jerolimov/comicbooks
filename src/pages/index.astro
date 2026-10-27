@@ -1,0 +1,156 @@
+---
+import Base from '../layouts/Base.astro';
+import { getBooks } from '../lib/books';
+
+const books = await getBooks();
+---
+
+<Base title="Comic Books" description="Pick a comic book from the shelf and start reading.">
+  <main class="shelf">
+    <header class="masthead">
+      <h1 class="display">Comic<span>books</span></h1>
+      <p>Pick an issue. Swipe, tap or use the arrow keys to read.</p>
+    </header>
+
+    {books.length === 0 && (
+      <p class="empty inked">
+        No books found. Add a folder with images and a <code>book.yaml</code> to <code>public/comics/</code>.
+      </p>
+    )}
+
+    <ul class="grid">
+      {books.map((book, i) => (
+        <li class="card" style={`--tilt:${(i % 3) - 1}deg`}>
+          <a href={`/read/${book.slug}/`} aria-label={`Read ${book.title}`}>
+            <figure class="cover inked">
+              <img src={book.cover} alt="" width="600" height="800" loading={i < 6 ? 'eager' : 'lazy'} />
+              {book.issue !== undefined && <span class="issue display">#{book.issue}</span>}
+              <span class="pages display">{book.pages.length} pages</span>
+            </figure>
+            <h2 class="display">{book.title}</h2>
+            {book.subtitle && <p class="subtitle">{book.subtitle}</p>}
+            {book.description && <p class="desc">{book.description}</p>}
+          </a>
+        </li>
+      ))}
+    </ul>
+
+    <footer class="colophon">
+      Each folder in <code>public/comics/</code> is one book, described by its <code>book.yaml</code>.
+    </footer>
+  </main>
+</Base>
+
+<style>
+  .shelf {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: clamp(1rem, 4vw, 3rem) 1rem 3rem;
+  }
+  .masthead {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    color: #fff;
+  }
+  .masthead h1 {
+    margin: 0;
+    font-size: clamp(3rem, 10vw, 6rem);
+    line-height: 1;
+    color: var(--yellow);
+    -webkit-text-stroke: 2px var(--ink);
+    text-shadow: 5px 5px 0 var(--ink), 8px 8px 0 var(--red);
+    transform: rotate(-2deg);
+  }
+  .masthead h1 span {
+    color: var(--blue);
+  }
+  .masthead p {
+    margin: 1rem 0 0;
+    font-size: 1.1rem;
+    opacity: 0.85;
+  }
+  .empty {
+    background: var(--paper);
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 2.5rem 2rem;
+  }
+  .card a {
+    display: block;
+    text-decoration: none;
+    color: #fff;
+  }
+  .cover {
+    position: relative;
+    margin: 0 0 1rem;
+    background: var(--paper);
+    transform: rotate(var(--tilt));
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .card a:hover .cover,
+  .card a:focus-visible .cover {
+    transform: rotate(0deg) translate(-3px, -3px) scale(1.02);
+    box-shadow: 10px 10px 0 var(--ink);
+  }
+  .cover img {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+  }
+  .issue,
+  .pages {
+    position: absolute;
+    padding: 0.2em 0.6em;
+    border: 3px solid var(--ink);
+    font-size: 1.1rem;
+  }
+  .issue {
+    top: -12px;
+    left: -12px;
+    background: var(--red);
+    color: #fff;
+    transform: rotate(-6deg);
+  }
+  .pages {
+    bottom: -12px;
+    right: -12px;
+    background: var(--yellow);
+    transform: rotate(3deg);
+  }
+  .card h2 {
+    margin: 0;
+    font-size: 1.8rem;
+    line-height: 1.1;
+    color: var(--yellow);
+    text-shadow: 3px 3px 0 var(--ink);
+  }
+  .subtitle {
+    margin: 0.2rem 0 0;
+    font-style: italic;
+    font-weight: 700;
+  }
+  .desc {
+    margin: 0.4rem 0 0;
+    font-size: 0.95rem;
+    opacity: 0.8;
+  }
+  .colophon {
+    margin-top: 4rem;
+    text-align: center;
+    color: #fff;
+    opacity: 0.6;
+    font-size: 0.9rem;
+  }
+  code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.1em 0.4em;
+    border-radius: 4px;
+  }
+</style>

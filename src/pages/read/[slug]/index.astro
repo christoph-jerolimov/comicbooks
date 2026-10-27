@@ -1,0 +1,16 @@
+---
+import Base from '../../../layouts/Base.astro';
+import Viewer from '../../../components/Viewer.astro';
+import { getBooks } from '../../../lib/books';
+
+export async function getStaticPaths() {
+  const books = await getBooks();
+  return books.map((book) => ({ params: { slug: book.slug }, props: { book } }));
+}
+
+const { book } = Astro.props;
+---
+
+<Base title={`${book.title} · Comic Books`} description={book.description} app>
+  <Viewer book={book} />
+</Base>

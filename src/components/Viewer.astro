@@ -1,0 +1,856 @@
+---
+import type { ComicBook } from '../lib/books';
+
+interface Props {
+  book: ComicBook;
+}
+
+const { book } = Astro.props;
+const first = book.pages[0];
+const payload = {
+  slug: book.slug,
+  direction: book.direction,
+  pages: book.pages.map((p) => ({ n: p.number, src: p.src, w: p.width, h: p.height, caption: p.caption ?? null })),
+};
+---
+
+<div class="viewer" id="viewer" data-dir={book.direction}>
+  <header class="chrome top">
+    <a class="chip" href="/" aria-label="Back to the shelf">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Shelf</span>
+    </a>
+    <div class="title">
+      <strong class="display">{book.title}</strong>
+      {book.subtitle && <small>{book.subtitle}</small>}
+    </div>
+    <button class="chip" type="button" data-action="overview" aria-label="Show all pages" aria-haspopup="dialog" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="currentColor"/></svg>
+      <span>Pages</span>
+    </button>
+  </header>
+
+  <div class="stage" id="stage" role="region" aria-roledescription="comic book" aria-label={`${book.title}, page viewer`}>
+    <div class="book">
+      <div class="track" id="track">
+        <figure class="sheet" data-role="prev" aria-hidden="true"><div class="paper"><img alt="" draggable="false" /></div></figure>
+        <figure class="sheet" data-role="current">
+          <div class="paper">
+            <img src={first.src} width={first.width} height={first.height} alt={`${book.title}, page 1`} draggable="false" fetchpriority="high" />
+          </div>
+        </figure>
+        <figure class="sheet" data-role="next" aria-hidden="true"><div class="paper"><img alt="" draggable="false" /></div></figure>
+      </div>
+    </div>
+    <p class="hint" id="hint" hidden>
+      <span>Swipe ◀ ▶ to turn pages</span>
+      <span>Swipe ▲ to see all pages</span>
+    </p>
+  </div>
+
+  <footer class="chrome bottom">
+    <button class="nav" type="button" data-action="prev" aria-label="Previous page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="counter display" aria-live="polite">
+      <span id="counter-current">1</span><span class="sep">/</span><span>{book.pages.length}</span>
+    </div>
+    <button class="nav" type="button" data-action="next" aria-label="Next page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </footer>
+
+  <section class="overview" id="overview" role="dialog" aria-modal="true" aria-label="All pages" hidden>
+    <div class="grip" aria-hidden="true"></div>
+    <header>
+      <h2 class="display">{book.title}</h2>
+      <button class="chip" type="button" data-action="close" aria-label="Close overview">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+        <span>Close</span>
+      </button>
+    </header>
+    <ol class="thumbs" id="thumbs">
+      {book.pages.map((p) => (
+        <li>
+          <button type="button" data-page={p.number} aria-label={`Go to page ${p.number}${p.caption ? `: ${p.caption}` : ''}`}>
+            <img src={p.src} width={p.width} height={p.height} alt="" loading="lazy" decoding="async" />
+            <span class="num display">{p.number}</span>
+            {p.caption && <span class="cap">{p.caption}</span>}
+          </button>
+        </li>
+      ))}
+    </ol>
+  </section>
+</div>
+
+<script type="application/json" id="book-data" set:html={JSON.stringify(payload)} />
+
+<script>
+  interface PageData { n: number; src: string; w: number; h: number; caption: string | null }
+  interface BookData { slug: string; direction: 'ltr' | 'rtl'; pages: PageData[] }
+
+  const book: BookData = JSON.parse(document.getElementById('book-data')!.textContent!);
+  const viewer = document.getElementById('viewer')!;
+  const stage = document.getElementById('stage')!;
+  const track = document.getElementById('track')!;
+  const overview = document.getElementById('overview')!;
+  const thumbs = document.getElementById('thumbs')!;
+  const hint = document.getElementById('hint')!;
+  const counter = document.getElementById('counter-current')!;
+  const overviewBtn = viewer.querySelector<HTMLButtonElement>('[data-action="overview"]')!;
+  const sheets = {
+    prev: track.querySelector<HTMLElement>('[data-role="prev"]')!,
+    current: track.querySelector<HTMLElement>('[data-role="current"]')!,
+    next: track.querySelector<HTMLElement>('[data-role="next"]')!,
+  };
+
+  const total = book.pages.length;
+  const rtl = book.direction === 'rtl';
+  const storageKey = `comic:${book.slug}:page`;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- state ----------
+  let index = initialIndex();
+  let animating = false;
+
+  function initialIndex(): number {
+    const fromHash = parseInt(location.hash.replace('#', ''), 10);
+    if (fromHash >= 1 && fromHash <= total) return fromHash - 1;
+    try {
+      const saved = parseInt(localStorage.getItem(storageKey) ?? '', 10);
+      if (saved >= 1 && saved <= total) return saved - 1;
+    } catch {}
+    return 0;
+  }
+
+  function persist() {
+    history.replaceState(null, '', `#${index + 1}`);
+    try {
+      localStorage.setItem(storageKey, String(index + 1));
+    } catch {}
+  }
+
+  // ---------- rendering ----------
+  function fill(sheet: HTMLElement, i: number, role: 'prev' | 'current' | 'next') {
+    const img = sheet.querySelector('img')!;
+    const paper = sheet.querySelector<HTMLElement>('.paper')!;
+    const page = book.pages[i];
+    sheet.dataset.role = role;
+    if (!page) {
+      sheet.hidden = true;
+      img.removeAttribute('src');
+      return;
+    }
+    sheet.hidden = false;
+    if (img.getAttribute('src') !== page.src) img.src = page.src;
+    img.alt = role === 'current' ? `Page ${page.n}${page.caption ? `: ${page.caption}` : ''}` : '';
+    sheet.setAttribute('aria-hidden', role === 'current' ? 'false' : 'true');
+    fit(paper, page);
+  }
+
+  /** Size the paper frame so the page image fits the stage while keeping its aspect ratio. */
+  function fit(paper: HTMLElement, page: PageData) {
+    const pad = 16; // breathing room around the page
+    const maxW = stage.clientWidth - pad * 2;
+    const maxH = stage.clientHeight - pad * 2;
+    const ratio = page.w / page.h;
+    let w = maxW;
+    let h = w / ratio;
+    if (h > maxH) {
+      h = maxH;
+      w = h * ratio;
+    }
+    paper.style.width = `${Math.floor(w)}px`;
+    paper.style.height = `${Math.floor(h)}px`;
+  }
+
+  function render() {
+    // In right-to-left books the "next" page sits on the left.
+    const before = rtl ? index + 1 : index - 1;
+    const after = rtl ? index - 1 : index + 1;
+    fill(sheets.prev, before, 'prev');
+    fill(sheets.current, index, 'current');
+    fill(sheets.next, after, 'next');
+    counter.textContent = String(index + 1);
+    viewer.querySelector<HTMLButtonElement>('[data-action="prev"]')!.disabled = index === 0;
+    viewer.querySelector<HTMLButtonElement>('[data-action="next"]')!.disabled = index === total - 1;
+    thumbs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
+      b.setAttribute('aria-current', Number(b.dataset.page) === index + 1 ? 'page' : 'false');
+    });
+    preload(index + 1);
+    preload(index + 2);
+    preload(index - 1);
+    persist();
+  }
+
+  const preloaded = new Set<string>();
+  function preload(i: number) {
+    const p = book.pages[i];
+    if (!p || preloaded.has(p.src)) return;
+    preloaded.add(p.src);
+    new Image().src = p.src;
+  }
+
+  // ---------- navigation ----------
+  function setTrack(x: number, animate: boolean) {
+    track.style.transition = animate && !reduceMotion ? 'transform 260ms cubic-bezier(.2,.8,.2,1)' : 'none';
+    track.style.transform = `translate3d(${x}px, 0, 0)`;
+  }
+
+  /** delta: +1 = next page, -1 = previous page. Screen direction follows the book's reading direction. */
+  function go(delta: 1 | -1) {
+    const target = index + delta;
+    if (animating || target < 0 || target >= total) {
+      bump(delta);
+      return;
+    }
+    animating = true;
+    const screenDir = rtl ? -delta : delta; // +1 moves the track left (reveals the sheet on the right)
+    const width = stage.clientWidth;
+    setTrack(-screenDir * width, true);
+    const done = () => {
+      track.removeEventListener('transitionend', done);
+      index = target;
+      setTrack(0, false);
+      render();
+      animating = false;
+    };
+    if (reduceMotion) {
+      done();
+    } else {
+      track.addEventListener('transitionend', done, { once: true });
+      setTimeout(done, 320); // safety net if transitionend never fires
+    }
+  }
+
+  function goTo(i: number) {
+    if (i < 0 || i >= total || i === index) return;
+    index = i;
+    setTrack(0, false);
+    render();
+  }
+
+  /** Little "you are at the end" nudge. */
+  function bump(delta: number) {
+    if (animating || reduceMotion) return;
+    const screenDir = rtl ? -delta : delta;
+    animating = true;
+    setTrack(-screenDir * 24, true);
+    setTimeout(() => {
+      setTrack(0, true);
+      setTimeout(() => (animating = false), 260);
+    }, 120);
+  }
+
+  // ---------- overview ----------
+  function openOverview() {
+    overview.hidden = false;
+    overview.style.transform = '';
+    overviewBtn.setAttribute('aria-expanded', 'true');
+    requestAnimationFrame(() => {
+      viewer.classList.add('overview-open');
+      const current = thumbs.querySelector<HTMLElement>('[aria-current="page"]');
+      current?.scrollIntoView({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+      current?.focus({ preventScroll: true });
+    });
+  }
+
+  function closeOverview() {
+    if (overview.hidden) return;
+    viewer.classList.remove('overview-open');
+    overviewBtn.setAttribute('aria-expanded', 'false');
+    const finish = () => {
+      overview.hidden = true;
+      overview.style.transform = '';
+    };
+    if (reduceMotion) finish();
+    else setTimeout(finish, 280);
+    overviewBtn.focus({ preventScroll: true });
+  }
+
+  function toggleChrome() {
+    viewer.classList.toggle('immersive');
+  }
+
+  // ---------- gestures on the stage (touch, pen and mouse via Pointer Events) ----------
+  const SWIPE_MIN = 60; // px before a horizontal swipe turns the page
+  const UP_MIN = 90; // px before an upward swipe opens the overview
+  const AXIS_LOCK = 10; // px of movement before we decide the swipe axis
+
+  let pointerId: number | null = null;
+  let startX = 0;
+  let startY = 0;
+  let startT = 0;
+  let axis: 'x' | 'y' | null = null;
+  let lastX = 0;
+  let lastT = 0;
+  let velocity = 0;
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (animating || pointerId !== null || e.button !== 0) return;
+    pointerId = e.pointerId;
+    startX = lastX = e.clientX;
+    startY = e.clientY;
+    startT = lastT = e.timeStamp;
+    axis = null;
+    velocity = 0;
+    stage.setPointerCapture(e.pointerId);
+    setTrack(0, false);
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== pointerId) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!axis) {
+      if (Math.hypot(dx, dy) < AXIS_LOCK) return;
+      axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+      viewer.classList.add('dragging');
+    }
+    if (axis === 'x') {
+      // resistance when there is no page in that direction
+      const screenDelta = dx < 0 ? 1 : -1; // dragging left reveals the sheet on the right
+      const pageDelta = rtl ? -screenDelta : screenDelta;
+      const blocked = index + pageDelta < 0 || index + pageDelta >= total;
+      setTrack(blocked ? dx * 0.25 : dx, false);
+      const dt = e.timeStamp - lastT;
+      if (dt > 0) velocity = (e.clientX - lastX) / dt;
+      lastX = e.clientX;
+      lastT = e.timeStamp;
+    } else {
+      // vertical: lift the book slightly as a preview of the overview sheet coming up
+      const lift = Math.max(Math.min(dy, 0), -160);
+      track.style.transition = 'none';
+      track.style.transform = `translate3d(0, ${lift * 0.5}px, 0) scale(${1 + lift / 1600})`;
+    }
+  });
+
+  function endPointer(e: PointerEvent) {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    viewer.classList.remove('dragging');
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    const elapsed = e.timeStamp - startT;
+
+    if (axis === 'x') {
+      const flick = Math.abs(velocity) > 0.45 && Math.abs(dx) > 20;
+      if (Math.abs(dx) > SWIPE_MIN || flick) {
+        const screenDelta = dx < 0 ? 1 : -1;
+        const pageDelta = (rtl ? -screenDelta : screenDelta) as 1 | -1;
+        const target = index + pageDelta;
+        if (target >= 0 && target < total) {
+          // continue from where the finger left off
+          go(pageDelta);
+          return;
+        }
+      }
+      setTrack(0, true);
+    } else if (axis === 'y') {
+      track.style.transition = reduceMotion ? 'none' : 'transform 220ms ease';
+      track.style.transform = '';
+      if (dy < -UP_MIN) openOverview();
+    } else if (elapsed < 350 && (e.pointerType !== 'mouse' || e.target === stage || (e.target as Element).closest('.sheet'))) {
+      // a tap: hide/show the chrome for distraction-free reading
+      toggleChrome();
+    }
+    axis = null;
+  }
+
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', (e) => {
+    if (e.pointerId !== pointerId) return;
+    pointerId = null;
+    axis = null;
+    viewer.classList.remove('dragging');
+    setTrack(0, true);
+  });
+
+  // ---------- overview: tap a page, close, or pull down to dismiss ----------
+  thumbs.addEventListener('click', (e) => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>('button[data-page]');
+    if (!btn) return;
+    goTo(Number(btn.dataset.page) - 1);
+    closeOverview();
+  });
+
+  let ovStartY = 0;
+  let ovPulling = false;
+  overview.addEventListener(
+    'touchstart',
+    (e) => {
+      ovStartY = e.touches[0].clientY;
+      ovPulling = overview.scrollTop <= 0;
+    },
+    { passive: true },
+  );
+  overview.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!ovPulling) return;
+      const dy = e.touches[0].clientY - ovStartY;
+      if (dy <= 0 || overview.scrollTop > 0) {
+        overview.style.transform = '';
+        return;
+      }
+      e.preventDefault();
+      overview.style.transition = 'none';
+      overview.style.transform = `translate3d(0, ${dy}px, 0)`;
+    },
+    { passive: false },
+  );
+  overview.addEventListener('touchend', (e) => {
+    if (!ovPulling) return;
+    ovPulling = false;
+    const dy = e.changedTouches[0].clientY - ovStartY;
+    overview.style.transition = '';
+    if (dy > 120) closeOverview();
+    else overview.style.transform = '';
+  });
+
+  // ---------- buttons & keyboard ----------
+  viewer.addEventListener('click', (e) => {
+    const btn = (e.target as Element).closest<HTMLElement>('[data-action]');
+    if (!btn) return;
+    switch (btn.dataset.action) {
+      case 'prev':
+        go(-1);
+        break;
+      case 'next':
+        go(1);
+        break;
+      case 'overview':
+        openOverview();
+        break;
+      case 'close':
+        closeOverview();
+        break;
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+    const open = !overview.hidden;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        if (open) return;
+        e.preventDefault();
+        go(e.key === 'ArrowRight' && rtl ? -1 : 1);
+        break;
+      case 'ArrowLeft':
+      case 'PageUp':
+      case 'Backspace':
+        if (open) return;
+        e.preventDefault();
+        go(e.key === 'ArrowLeft' && rtl ? 1 : -1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        goTo(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        goTo(total - 1);
+        break;
+      case 'ArrowUp':
+      case 'o':
+      case 'g':
+        if (open) return;
+        e.preventDefault();
+        openOverview();
+        break;
+      case 'ArrowDown':
+      case 'Escape':
+        if (open) {
+          e.preventDefault();
+          closeOverview();
+        }
+        break;
+      case 'h':
+        toggleChrome();
+        break;
+    }
+  });
+
+  window.addEventListener('hashchange', () => {
+    const n = parseInt(location.hash.replace('#', ''), 10);
+    if (n >= 1 && n <= total) goTo(n - 1);
+  });
+
+  // Keep the page fitted when the viewport changes (rotation, chrome hide/show, resize).
+  const ro = new ResizeObserver(() => {
+    render();
+  });
+  ro.observe(stage);
+
+  // ---------- first-run hint ----------
+  try {
+    if (!localStorage.getItem('comic:hint-seen') && matchMedia('(pointer: coarse)').matches) {
+      hint.hidden = false;
+      setTimeout(() => hint.classList.add('fade'), 2800);
+      setTimeout(() => (hint.hidden = true), 3600);
+      localStorage.setItem('comic:hint-seen', '1');
+    }
+  } catch {}
+
+  render();
+</script>
+
+<style>
+  .viewer {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    background-color: var(--bg);
+    background-image: radial-gradient(var(--bg-dot) 1.5px, transparent 1.5px);
+    background-size: 14px 14px;
+    color: #fff;
+  }
+
+  /* ---------- chrome (top & bottom bars) ---------- */
+  .chrome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 0.9rem;
+    z-index: 2;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  .chrome.top {
+    padding-top: calc(0.6rem + var(--safe-top));
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+  }
+  .chrome.bottom {
+    justify-content: center;
+    gap: 1.25rem;
+    padding-bottom: calc(0.6rem + var(--safe-bottom));
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+  }
+  /* In immersive mode the bars slide away and the stage takes the whole screen. */
+  .viewer.immersive {
+    grid-template-rows: 0 1fr 0;
+  }
+  .viewer.immersive .chrome {
+    min-height: 0;
+    pointer-events: none;
+  }
+  .viewer.immersive .chrome.top {
+    transform: translateY(-110%);
+    opacity: 0;
+  }
+  .viewer.immersive .chrome.bottom {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+  .title {
+    min-width: 0;
+    text-align: center;
+    line-height: 1.1;
+  }
+  .title strong {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 400;
+    color: var(--yellow);
+    text-shadow: 2px 2px 0 var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .title small {
+    display: block;
+    font-style: italic;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip,
+  .nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    padding: 0.4em 0.7em;
+    border: 3px solid var(--ink);
+    border-radius: 999px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+    text-decoration: none;
+    box-shadow: 3px 3px 0 var(--ink);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+  }
+  .chip svg,
+  .nav svg {
+    width: 1.2em;
+    height: 1.2em;
+  }
+  .chip:active,
+  .nav:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+  .chip:focus-visible,
+  .nav:focus-visible,
+  .thumbs button:focus-visible {
+    outline: 3px dashed var(--yellow);
+    outline-offset: 3px;
+  }
+  .nav {
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+    justify-content: center;
+    background: var(--yellow);
+    font-size: 1.3rem;
+  }
+  .nav:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+  .counter {
+    min-width: 5ch;
+    text-align: center;
+    font-size: 1.5rem;
+    text-shadow: 2px 2px 0 var(--ink);
+  }
+  .counter .sep {
+    margin: 0 0.25em;
+    opacity: 0.6;
+  }
+
+  /* ---------- stage, book and sheets ---------- */
+  .stage {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+  }
+  .viewer.dragging .stage {
+    cursor: grabbing;
+  }
+  .book,
+  .track {
+    position: absolute;
+    inset: 0;
+  }
+  .track {
+    will-change: transform;
+  }
+  .sheet {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    display: grid;
+    place-items: center;
+  }
+  .sheet[data-role='prev'] {
+    transform: translateX(-100%);
+  }
+  .sheet[data-role='next'] {
+    transform: translateX(100%);
+  }
+  .paper {
+    position: relative;
+    background: var(--paper);
+    border: 4px solid var(--ink);
+    box-shadow:
+      6px 6px 0 var(--ink),
+      0 20px 40px rgba(0, 0, 0, 0.5);
+  }
+  /* stacked pages peeking out behind the current sheet */
+  .sheet[data-role='current'] .paper::before,
+  .sheet[data-role='current'] .paper::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    z-index: -1;
+    background: var(--paper-dark);
+    border: 4px solid var(--ink);
+    transform: translate(10px, 8px) rotate(1deg);
+  }
+  .sheet[data-role='current'] .paper::after {
+    transform: translate(-8px, 12px) rotate(-1.2deg);
+    background: #f3e9cf;
+  }
+  .paper img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    -webkit-user-drag: none;
+  }
+
+  .hint {
+    position: absolute;
+    left: 50%;
+    bottom: 1.5rem;
+    transform: translateX(-50%);
+    margin: 0;
+    padding: 0.6rem 1rem;
+    display: grid;
+    gap: 0.2rem;
+    text-align: center;
+    background: var(--yellow);
+    color: var(--ink);
+    border: 3px solid var(--ink);
+    border-radius: var(--radius);
+    box-shadow: 4px 4px 0 var(--ink);
+    font-weight: 700;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
+    z-index: 3;
+  }
+  .hint.fade {
+    opacity: 0;
+  }
+
+  /* ---------- overview sheet ---------- */
+  .overview {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    background: var(--paper);
+    background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1.5px, transparent 1.5px);
+    background-size: 12px 12px;
+    color: var(--ink);
+    border-top: 5px solid var(--ink);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+    transform: translate3d(0, 100%, 0);
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    padding-bottom: calc(2rem + var(--safe-bottom));
+  }
+  .overview[hidden] {
+    display: none;
+  }
+  .viewer.overview-open .overview {
+    transform: translate3d(0, 0, 0);
+  }
+  .viewer.overview-open .stage {
+    filter: brightness(0.6);
+  }
+  .grip {
+    width: 56px;
+    height: 6px;
+    margin: 10px auto 0;
+    border-radius: 3px;
+    background: var(--ink);
+    opacity: 0.4;
+  }
+  .overview header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1rem 0.75rem;
+    padding-top: calc(0.5rem + var(--safe-top));
+    background: inherit;
+  }
+  .overview h2 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 400;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .thumbs {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 1.25rem 1rem;
+  }
+  @media (min-width: 700px) {
+    .thumbs {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      padding: 1rem 2rem;
+    }
+  }
+  .thumbs button {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 3px solid var(--ink);
+    background: #fff;
+    box-shadow: 4px 4px 0 var(--ink);
+    color: var(--ink);
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s ease;
+  }
+  .thumbs button:hover {
+    transform: translate(-2px, -2px);
+  }
+  .thumbs button[aria-current='page'] {
+    outline: 4px solid var(--red);
+    outline-offset: 2px;
+  }
+  .thumbs img {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: contain;
+    background: var(--paper);
+  }
+  .thumbs .num {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    min-width: 2em;
+    padding: 0.1em 0.5em;
+    text-align: center;
+    background: var(--yellow);
+    border: 3px solid var(--ink);
+    font-size: 1.1rem;
+  }
+  .thumbs button[aria-current='page'] .num {
+    background: var(--red);
+    color: #fff;
+  }
+  .thumbs .cap {
+    display: block;
+    padding: 0.3em 0.5em;
+    border-top: 3px solid var(--ink);
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* On wide screens the overview becomes a centred panel instead of a full sheet. */
+  @media (min-width: 900px) {
+    .overview {
+      inset: 4vh 8vw;
+      border: 5px solid var(--ink);
+      box-shadow: 10px 10px 0 var(--ink);
+    }
+    .grip {
+      display: none;
+    }
+  }
+</style>
