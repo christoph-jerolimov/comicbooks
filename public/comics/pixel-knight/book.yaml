@@ -1,0 +1,11 @@
+# Comic book manifest. One folder = one book.
+title: "The Pixel Knight"
+subtitle: "The Dragon of Gloomy Hill"
+author: "Comicbooks Press"
+issue: 1
+description: "Sir Pix goes to slay a dragon and comes back with a tea shop."
+tags: [fantasy, humour]
+cover: cover.png
+direction: ltr   # reading direction: ltr or rtl (manga)
+# No "pages" list: every image in the folder (except the cover) is used,
+# sorted by file name.

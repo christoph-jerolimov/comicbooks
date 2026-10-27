@@ -1,0 +1,36 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Full-bleed app screens (the viewer) hide the body scrollbar. */
+  app?: boolean;
+}
+
+const { title, description = 'A comic book reader.', app = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#1b1b2f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+  </head>
+  <body class:list={{ app }}>
+    <slot />
+    <style is:global>
+      body.app {
+        overflow: hidden;
+        height: 100dvh;
+        overscroll-behavior: none;
+      }
+    </style>
+  </body>
+</html>

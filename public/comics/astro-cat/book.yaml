@@ -1,0 +1,11 @@
+# Comic book manifest. One folder = one book.
+title: "Astro Cat"
+subtitle: "Lost in Orbit"
+author: "Comicbooks Press"
+issue: 1
+description: "A small cat, a small rocket, and one very large space rock."
+tags: [space, cats, all ages]
+cover: cover.png
+direction: ltr   # reading direction: ltr or rtl (manga)
+# No "pages" list: every image in the folder (except the cover) is used,
+# sorted by file name.

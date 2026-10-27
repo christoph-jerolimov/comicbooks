@@ -1,0 +1,25 @@
+# Comic book manifest. One folder = one book.
+title: "Noodle & Bolt"
+subtitle: "The Mysterious Box"
+author: "Comicbooks Press"
+issue: 3
+description: "A robot, a kid, and a box with no return address."
+tags: [robots, city, friendship]
+cover: cover.png
+direction: ltr   # reading direction: ltr or rtl (manga)
+# Explicit page order. Each entry may be a file name or a { file, caption } object.
+pages:
+  - file: morning-commute.png
+    caption: "morning commute"
+  - file: the-package.png
+    caption: "the package"
+  - file: opening-it.png
+    caption: "opening it"
+  - file: the-note.png
+    caption: "the note"
+  - file: rooftop.png
+    caption: "rooftop"
+  - file: harvest.png
+    caption: "harvest"
+  - file: the-end.png
+    caption: "the end"
