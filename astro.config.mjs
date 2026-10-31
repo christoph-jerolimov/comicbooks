@@ -1,4 +1,5 @@
 import { defineConfig } from 'astro/config';
+import thumbnails from './src/integrations/thumbnails';
 
 // The site is deployed to GitHub Pages as a project page, so it lives under
 // https://<owner>.github.io/<repo>/. `site` and `base` make every generated
@@ -11,4 +12,5 @@ export default defineConfig({
   base,
   output: 'static',
   trailingSlash: 'ignore',
+  integrations: [thumbnails()],
 });

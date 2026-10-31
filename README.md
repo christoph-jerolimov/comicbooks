@@ -47,6 +47,11 @@ The build reads each manifest, measures the images, and generates one route
 per book under `/read/<folder-name>/`. Files listed in `pages` that do not
 exist are skipped with a warning.
 
+Small WebP thumbnails (480 px wide) for the shelf and the page overview are
+produced automatically by `src/integrations/thumbnails.ts`: on demand by the
+dev server, and into `dist/thumbs/` during the build. The reader itself always
+shows the original image.
+
 ## Development
 
 ```sh
@@ -83,6 +88,7 @@ public/comics/<book>/     images + book.yaml, one folder per book
 scripts/generate-samples.mjs
 src/lib/books.ts          build-time loader for the manifests
 src/lib/url.ts            base-path helper for links
+src/integrations/thumbnails.ts  thumbnail generation (dev + build)
 .github/workflows/deploy.yml  GitHub Pages deployment
 src/pages/index.astro     the shelf
 src/pages/read/[slug]/    the reader route

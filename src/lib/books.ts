@@ -11,6 +11,8 @@ export interface ComicPage {
   number: number;
   /** URL of the image, relative to site root */
   src: string;
+  /** URL of a small WebP thumbnail (see src/integrations/thumbnails.ts) */
+  thumb: string;
   /** File name inside the book folder */
   file: string;
   caption?: string;
@@ -28,6 +30,7 @@ export interface ComicBook {
   tags: string[];
   direction: 'ltr' | 'rtl';
   cover: string;
+  coverThumb: string;
   pages: ComicPage[];
 }
 
@@ -45,6 +48,11 @@ interface Manifest {
 
 const COMICS_DIR = path.resolve('public/comics');
 const IMAGE_RE = /\.(png|jpe?g|webp|gif|avif|svg)$/i;
+
+const imageUrl = (slug: string, file: string) => withBase(`/comics/${slug}/${encodeURIComponent(file)}`);
+// SVGs are tiny and scale on their own, so they are their own thumbnail.
+const thumbUrl = (slug: string, file: string) =>
+  /\.svg$/i.test(file) ? imageUrl(slug, file) : withBase(`/thumbs/${slug}/${encodeURIComponent(file)}.webp`);
 
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
@@ -87,7 +95,8 @@ async function loadBook(slug: string): Promise<ComicBook | null> {
     pages.push({
       number: i + 1,
       file: p.file,
-      src: withBase(`/comics/${slug}/${encodeURIComponent(p.file)}`),
+      src: imageUrl(slug, p.file),
+      thumb: thumbUrl(slug, p.file),
       caption: p.caption,
       ...(await imageSize(abs)),
     });
@@ -103,7 +112,8 @@ async function loadBook(slug: string): Promise<ComicBook | null> {
     description: manifest.description,
     tags: manifest.tags ?? [],
     direction: manifest.direction === 'rtl' ? 'rtl' : 'ltr',
-    cover: cover ? withBase(`/comics/${slug}/${encodeURIComponent(cover)}`) : (pages[0]?.src ?? ''),
+    cover: cover ? imageUrl(slug, cover) : (pages[0]?.src ?? ''),
+    coverThumb: cover ? thumbUrl(slug, cover) : (pages[0]?.thumb ?? ''),
     pages,
   };
 }

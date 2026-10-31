@@ -24,9 +24,17 @@ const books = await getBooks();
         <li class="card" style={`--tilt:${(i % 3) - 1}deg`}>
           <a href={withBase(`/read/${book.slug}/`)} aria-label={`Read ${book.title}`}>
             <figure class="cover inked">
-              <img src={book.cover} alt="" width="600" height="800" loading={i < 6 ? 'eager' : 'lazy'} />
-              {book.issue !== undefined && <span class="issue display">#{book.issue}</span>}
-              <span class="pages display">{book.pages.length} pages</span>
+              <img
+                src={book.coverThumb}
+                srcset={`${book.coverThumb} 480w, ${book.cover} 1200w`}
+                sizes="(max-width: 520px) 90vw, 260px"
+                alt=""
+                width="600"
+                height="800"
+                loading={i < 6 ? 'eager' : 'lazy'}
+              />
+              {book.issue !== undefined && <span class="issue numeric">#{book.issue}</span>}
+              <span class="pages numeric">{book.pages.length} pages</span>
             </figure>
             <h2 class="display">{book.title}</h2>
             {book.subtitle && <p class="subtitle">{book.subtitle}</p>}

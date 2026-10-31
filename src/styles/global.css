@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Luckiest+Guy&family=Comic+Neue:ital,wght@0,400;0,700;1,400&display=swap');
 
 :root {
   --ink: #141414;
@@ -11,6 +11,8 @@
   --bg-dot: rgba(255, 255, 255, 0.08);
   --font-display: 'Bangers', Impact, 'Arial Black', sans-serif;
   --font-body: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+  /* Bangers draws 1 and 7 almost identically, so anything numeric uses this instead. */
+  --font-numbers: 'Luckiest Guy', 'Arial Black', Impact, sans-serif;
   --radius: 10px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -56,6 +58,12 @@ button {
   font-family: var(--font-display);
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.numeric {
+  font-family: var(--font-numbers);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Comic "ink" frame: thick border + hard offset shadow */

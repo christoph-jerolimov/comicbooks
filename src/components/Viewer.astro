@@ -11,7 +11,7 @@ const first = book.pages[0];
 const payload = {
   slug: book.slug,
   direction: book.direction,
-  pages: book.pages.map((p) => ({ n: p.number, src: p.src, w: p.width, h: p.height, caption: p.caption ?? null })),
+  pages: book.pages.map((p) => ({ n: p.number, src: p.src, thumb: p.thumb, w: p.width, h: p.height, caption: p.caption ?? null })),
 };
 ---
 
@@ -34,13 +34,18 @@ const payload = {
   <div class="stage" id="stage" role="region" aria-roledescription="comic book" aria-label={`${book.title}, page viewer`}>
     <div class="book">
       <div class="track" id="track">
-        <figure class="sheet" data-role="prev" aria-hidden="true"><div class="paper"><img alt="" draggable="false" /></div></figure>
+        <figure class="sheet" data-role="prev" aria-hidden="true">
+          <div class="paper"><img alt="" draggable="false" /><span class="loader display" aria-hidden="true">Loading…</span></div>
+        </figure>
         <figure class="sheet" data-role="current">
           <div class="paper">
             <img src={first.src} width={first.width} height={first.height} alt={`${book.title}, page 1`} draggable="false" fetchpriority="high" />
+            <span class="loader display" aria-hidden="true">Loading…</span>
           </div>
         </figure>
-        <figure class="sheet" data-role="next" aria-hidden="true"><div class="paper"><img alt="" draggable="false" /></div></figure>
+        <figure class="sheet" data-role="next" aria-hidden="true">
+          <div class="paper"><img alt="" draggable="false" /><span class="loader display" aria-hidden="true">Loading…</span></div>
+        </figure>
       </div>
     </div>
     <p class="hint" id="hint" hidden>
@@ -53,7 +58,7 @@ const payload = {
     <button class="nav" type="button" data-action="prev" aria-label="Previous page">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
-    <div class="counter display" aria-live="polite">
+    <div class="counter numeric" aria-live="polite">
       <span id="counter-current">1</span><span class="sep">/</span><span>{book.pages.length}</span>
     </div>
     <button class="nav" type="button" data-action="next" aria-label="Next page">
@@ -74,8 +79,8 @@ const payload = {
       {book.pages.map((p) => (
         <li>
           <button type="button" data-page={p.number} aria-label={`Go to page ${p.number}${p.caption ? `: ${p.caption}` : ''}`}>
-            <img src={p.src} width={p.width} height={p.height} alt="" loading="lazy" decoding="async" />
-            <span class="num display">{p.number}</span>
+            <img src={p.thumb} width={p.width} height={p.height} alt="" loading="lazy" decoding="async" />
+            <span class="num numeric">{p.number}</span>
             {p.caption && <span class="cap">{p.caption}</span>}
           </button>
         </li>
@@ -87,7 +92,7 @@ const payload = {
 <script type="application/json" id="book-data" set:html={JSON.stringify(payload)} />
 
 <script>
-  interface PageData { n: number; src: string; w: number; h: number; caption: string | null }
+  interface PageData { n: number; src: string; thumb: string; w: number; h: number; caption: string | null }
   interface BookData { slug: string; direction: 'ltr' | 'rtl'; pages: PageData[] }
 
   const book: BookData = JSON.parse(document.getElementById('book-data')!.textContent!);
@@ -99,11 +104,22 @@ const payload = {
   const hint = document.getElementById('hint')!;
   const counter = document.getElementById('counter-current')!;
   const overviewBtn = viewer.querySelector<HTMLButtonElement>('[data-action="overview"]')!;
-  const sheets = {
-    prev: track.querySelector<HTMLElement>('[data-role="prev"]')!,
-    current: track.querySelector<HTMLElement>('[data-role="current"]')!,
-    next: track.querySelector<HTMLElement>('[data-role="next"]')!,
-  };
+  // The three sheet elements, ordered left → centre → right on screen. When a
+  // page turn completes the array is rotated instead of swapping image sources,
+  // so the sheet that just slid into view (and is already loaded) simply becomes
+  // the current one. Only the sheet that moved to the far side loads a new image.
+  let sheets: HTMLElement[] = [
+    track.querySelector<HTMLElement>('[data-role="prev"]')!,
+    track.querySelector<HTMLElement>('[data-role="current"]')!,
+    track.querySelector<HTMLElement>('[data-role="next"]')!,
+  ];
+  for (const sheet of sheets) {
+    const img = sheet.querySelector('img')!;
+    const paper = sheet.querySelector<HTMLElement>('.paper')!;
+    const settle = () => paper.classList.remove('loading');
+    img.addEventListener('load', settle);
+    img.addEventListener('error', settle);
+  }
 
   const total = book.pages.length;
   const rtl = book.direction === 'rtl';
@@ -143,7 +159,16 @@ const payload = {
       return;
     }
     sheet.hidden = false;
-    if (img.getAttribute('src') !== page.src) img.src = page.src;
+    if (img.getAttribute('src') !== page.src) {
+      // Remove the old source first: otherwise Chrome keeps showing the previous
+      // picture until the new one has fully downloaded, which on a slow
+      // connection makes every page look like the same page.
+      img.removeAttribute('src');
+      paper.classList.add('loading');
+      img.src = page.src;
+    }
+    if (img.complete && img.naturalWidth > 0) paper.classList.remove('loading');
+    img.setAttribute('fetchpriority', role === 'current' ? 'high' : 'low');
     img.alt = role === 'current' ? `Page ${page.n}${page.caption ? `: ${page.caption}` : ''}` : '';
     sheet.setAttribute('aria-hidden', role === 'current' ? 'false' : 'true');
     fit(paper, page);
@@ -169,9 +194,9 @@ const payload = {
     // In right-to-left books the "next" page sits on the left.
     const before = rtl ? index + 1 : index - 1;
     const after = rtl ? index - 1 : index + 1;
-    fill(sheets.prev, before, 'prev');
-    fill(sheets.current, index, 'current');
-    fill(sheets.next, after, 'next');
+    fill(sheets[0], before, 'prev');
+    fill(sheets[1], index, 'current');
+    fill(sheets[2], after, 'next');
     counter.textContent = String(index + 1);
     viewer.querySelector<HTMLButtonElement>('[data-action="prev"]')!.disabled = index === 0;
     viewer.querySelector<HTMLButtonElement>('[data-action="next"]')!.disabled = index === total - 1;
@@ -209,9 +234,15 @@ const payload = {
     const screenDir = rtl ? -delta : delta; // +1 moves the track left (reveals the sheet on the right)
     const width = stage.clientWidth;
     setTrack(-screenDir * width, true);
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
       track.removeEventListener('transitionend', done);
       index = target;
+      // The revealed sheet becomes the centre one; the sheet that left the
+      // screen wraps around to the other side and will load the page after that.
+      sheets = screenDir === 1 ? [sheets[1], sheets[2], sheets[0]] : [sheets[2], sheets[0], sheets[1]];
       setTrack(0, false);
       render();
       animating = false;
@@ -695,6 +726,35 @@ const payload = {
     object-fit: contain;
     pointer-events: none;
     -webkit-user-drag: none;
+    transition: opacity 0.15s ease;
+  }
+  .paper.loading img {
+    opacity: 0;
+  }
+  .loader {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-4deg);
+    padding: 0.3em 0.8em;
+    background: var(--yellow);
+    border: 3px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    font-size: 1.4rem;
+    color: var(--ink);
+    animation: pulse 1s ease-in-out infinite alternate;
+  }
+  .paper.loading .loader {
+    display: block;
+  }
+  @keyframes pulse {
+    from {
+      transform: translate(-50%, -50%) rotate(-4deg) scale(1);
+    }
+    to {
+      transform: translate(-50%, -50%) rotate(-4deg) scale(1.08);
+    }
   }
 
   .hint {
