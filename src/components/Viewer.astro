@@ -287,8 +287,13 @@ const payload = {
     });
   }
 
-  function closeOverview() {
+  /** direction: which way the sheet leaves the screen ('down' is the default slide-back). */
+  function closeOverview(direction: 'down' | 'up' = 'down') {
     if (overview.hidden) return;
+    if (direction === 'up') {
+      overview.style.transition = '';
+      overview.style.transform = 'translate3d(0, -100%, 0)';
+    }
     viewer.classList.remove('overview-open');
     overviewBtn.setAttribute('aria-expanded', 'false');
     const finish = () => {
@@ -406,37 +411,57 @@ const payload = {
     closeOverview();
   });
 
+  // Pulling the list past either end dismisses it: drag down when it is
+  // scrolled to the top, or drag up when it is scrolled to the bottom (which
+  // is always the case when the list is short enough not to scroll at all).
   let ovStartY = 0;
-  let ovPulling = false;
+  let ovLastY = 0;
+  let ovPull: 'down' | 'up' | null = null;
+  const ovAtTop = () => overview.scrollTop <= 0;
+  const ovAtBottom = () => overview.scrollTop + overview.clientHeight >= overview.scrollHeight - 1;
+
   overview.addEventListener(
     'touchstart',
     (e) => {
-      ovStartY = e.touches[0].clientY;
-      ovPulling = overview.scrollTop <= 0;
+      ovStartY = ovLastY = e.touches[0].clientY;
+      ovPull = null;
     },
     { passive: true },
   );
   overview.addEventListener(
     'touchmove',
     (e) => {
-      if (!ovPulling) return;
-      const dy = e.touches[0].clientY - ovStartY;
-      if (dy <= 0 || overview.scrollTop > 0) {
+      const y = e.touches[0].clientY;
+      if (!ovPull) {
+        // Start a pull as soon as the finger moves outward while at an edge,
+        // even if the list was scrolled to that edge earlier in this gesture.
+        const step = y - ovLastY;
+        if (step > 0 && ovAtTop()) ovPull = 'down';
+        else if (step < 0 && ovAtBottom()) ovPull = 'up';
+        if (ovPull) ovStartY = ovLastY;
+      }
+      ovLastY = y;
+      if (!ovPull) return;
+      const d = y - ovStartY;
+      if ((ovPull === 'down' && d <= 0) || (ovPull === 'up' && d >= 0)) {
+        // reversed direction: hand control back to native scrolling
+        ovPull = null;
         overview.style.transform = '';
         return;
       }
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       overview.style.transition = 'none';
-      overview.style.transform = `translate3d(0, ${dy}px, 0)`;
+      overview.style.transform = `translate3d(0, ${d}px, 0)`;
     },
     { passive: false },
   );
   overview.addEventListener('touchend', (e) => {
-    if (!ovPulling) return;
-    ovPulling = false;
-    const dy = e.changedTouches[0].clientY - ovStartY;
+    if (!ovPull) return;
+    const d = e.changedTouches[0].clientY - ovStartY;
+    const pull = ovPull;
+    ovPull = null;
     overview.style.transition = '';
-    if (dy > 120) closeOverview();
+    if (Math.abs(d) > 120) closeOverview(pull);
     else overview.style.transform = '';
   });
 
@@ -489,6 +514,10 @@ const payload = {
         goTo(total - 1);
         break;
       case 'ArrowUp':
+        e.preventDefault();
+        if (open) closeOverview('up');
+        else openOverview();
+        break;
       case 'o':
       case 'g':
         if (open) return;

@@ -10,7 +10,7 @@ its pages. The site is fully static and works on desktop browsers and phones.
 | ------------------------ | ---------------------------------- | ------------------------------ |
 | Next / previous page     | swipe left / right, or ◀ ▶ buttons | drag, ← →, Space, PageUp/Down  |
 | All pages (overview)     | swipe up, or the **Pages** button  | ↑, `o`, `g`, or **Pages**      |
-| Close overview           | swipe down, tap a page, or Close   | Esc, ↓, click a page, or Close |
+| Close overview           | swipe down at the top or up at the end of the list, tap a page, or Close | Esc, ↑, ↓, click a page, or Close |
 | Hide / show the bars     | tap the page                       | click the page, or `h`         |
 | First / last page        |                                    | Home / End                     |
 
